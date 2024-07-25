@@ -19,6 +19,11 @@ class CustomStudentManager(UserManager):
         extra_fields.setdefault("is_superuser", False)
         return self._create_user(username, password, **extra_fields)
 
+    def create(self, username, password, **extra_fields):
+        extra_fields.setdefault("is_staff", False)
+        extra_fields.setdefault("is_superuser", False)
+        return self._create_user(username, password, **extra_fields)
+
     def create_superuser(self, username, password=None, **extra_fields):
         raise TypeError('Cannot create Student super user')
 
@@ -36,12 +41,17 @@ class CustomTeacherManager(UserManager):
         extra_fields.setdefault("is_superuser", False)
         return self._create_user(username, password, **extra_fields)
 
+    def create(self, username, password, **extra_fields):
+        extra_fields.setdefault("is_staff", False)
+        extra_fields.setdefault("is_superuser", False)
+        return self._create_user(username, password, **extra_fields)
+
     def create_superuser(self, username, password=None, **extra_fields):
         raise TypeError('Cannot create Teacher super user')
 
 
 class Group(models.Model):
-    name = models.CharField(max_length=50)
+    name = models.CharField(max_length=50, primary_key=True)
 
 
 class Semester(models.Model):
