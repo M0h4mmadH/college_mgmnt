@@ -3,6 +3,7 @@ from django.contrib.auth.hashers import make_password
 from django.utils import timezone
 from main_app.models import Group, Teacher, Student, Semester, Course, Class, ClassStudent
 from datetime import timedelta
+from tqdm import tqdm
 import random
 
 
@@ -10,6 +11,15 @@ class Command(BaseCommand):
     help = 'Populate the database with sample data'
 
     def handle(self, *args, **options):
+        ClassStudent.objects.all().delete()
+        Student.objects.all().delete()
+        Class.objects.all().delete()
+        Course.objects.all().delete()
+        Teacher.objects.all().delete()
+        ClassStudent.objects.all().delete()
+        Semester.objects.all().delete()
+        Group.objects.all().delete()
+
         self.stdout.write('Populating database...')
 
         # Create groups
@@ -20,11 +30,11 @@ class Command(BaseCommand):
         ]
 
         # Create teachers
-        for group in groups:
+        for group in tqdm(groups):
             for i in range(10):
                 Teacher.objects.create(
                     username=f"{group.name.lower()}_teacher_{i + 1}",
-                    password=make_password("password123"),
+                    password="test",
                     first_name=f"Teacher{i + 1}",
                     last_name=f"{group.name}",
                     email=f"{group.name.lower()}_teacher_{i + 1}@example.com",
@@ -34,7 +44,7 @@ class Command(BaseCommand):
 
         # Create semesters
         now = timezone.now()
-        for group in groups:
+        for group in tqdm(groups):
             Semester.objects.create(
                 entrant_date=now.date(),
                 group=group,
@@ -51,11 +61,11 @@ class Command(BaseCommand):
             )
 
         # Create students
-        for group in groups:
+        for group in tqdm(groups):
             for i in range(10):
                 Student.objects.create(
                     username=f"{group.name.lower()}_student_{i + 1}",
-                    password=make_password("password123"),
+                    password="test",
                     first_name=f"Student{i + 1}",
                     last_name=f"{group.name}",
                     email=f"{group.name.lower()}_student_{i + 1}@example.com",
@@ -74,7 +84,7 @@ class Command(BaseCommand):
         ]
 
         # Create classes and assign students
-        for semester in Semester.objects.all():
+        for semester in tqdm(Semester.objects.all()):
             for course in courses:
                 if course.group == semester.group:
                     teacher = Teacher.objects.filter(group=semester.group).order_by('?').first()

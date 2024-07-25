@@ -17,7 +17,6 @@ class IsStudent(permissions.BasePermission):
         return request.user.is_authenticated and hasattr(request.user, 'student')
 
 
-
 class ReadOnly(permissions.BasePermission):
     """
     Custom permission to allow only read-only access
