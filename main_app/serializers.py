@@ -113,3 +113,23 @@ class StudentInClassSerializer(serializers.ModelSerializer):
             'last_name': obj.student.last_name,
             'email': obj.student.email
         }
+
+
+class AttendanceRecordSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = ClassStudentAttendance
+        fields = ['student', 'attendance', 'date']
+
+    def validate(self, data):
+        course_semester = self.context['course_semester']
+        student = data['student']
+
+        if not ClassStudent.objects.filter(course_semester=course_semester, student=student).exists():
+            raise serializers.ValidationError("This student is not enrolled in this class.")
+
+        return data
+
+
+class ClassChangeSerializer(serializers.Serializer):
+    add_classes = serializers.ListField(child=serializers.IntegerField(), required=False)
+    delete_classes = serializers.ListField(child=serializers.IntegerField(), required=False)

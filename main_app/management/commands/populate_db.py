@@ -1,7 +1,7 @@
 from django.core.management.base import BaseCommand
-from django.contrib.auth.hashers import make_password
 from django.utils import timezone
-from main_app.models import Group, Teacher, Student, Semester, Course, Class, ClassStudent
+from main_app.models import Group, Teacher, Student, Semester, Course, Class, ClassStudent, StudentSemester, \
+    ClassStudentAttendance
 from datetime import timedelta
 from tqdm import tqdm
 import random
@@ -12,6 +12,7 @@ class Command(BaseCommand):
 
     def handle(self, *args, **options):
         ClassStudent.objects.all().delete()
+        ClassStudentAttendance.objects.all().delete()
         Student.objects.all().delete()
         Class.objects.all().delete()
         Course.objects.all().delete()
@@ -101,6 +102,10 @@ class Command(BaseCommand):
                         ClassStudent.objects.create(
                             course_semester=class_obj,
                             student=student
+                        )
+                        StudentSemester.objects.create(
+                            student=student,
+                            semester=semester,
                         )
 
         self.stdout.write(self.style.SUCCESS('Database successfully populated!'))

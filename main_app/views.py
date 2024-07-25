@@ -2,7 +2,7 @@ from rest_framework import viewsets
 from rest_framework.permissions import IsAdminUser
 from rest_framework import generics
 from rest_framework.response import Response
-from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND
+from rest_framework.status import HTTP_400_BAD_REQUEST, HTTP_404_NOT_FOUND, HTTP_201_CREATED, HTTP_200_OK
 
 from .permissions import IsTeacher, IsStudent
 from main_app.serializers import *
@@ -92,7 +92,7 @@ class TeacherCurrentSemesterClassListView(generics.ListAPIView):
         if not semester_id:
             return Response({"error": "semester_id parameter is required"}, status=HTTP_400_BAD_REQUEST)
         return super().list(request, *args, **kwargs)
-    
+
     @swagger_auto_schema(
         operation_description="Get current semester class",
         operation_id="get_current_semester",
@@ -108,7 +108,6 @@ class TeacherCurrentSemesterClassListView(generics.ListAPIView):
     )
     def get(self, request, *args, **kwargs):
         return super().get(request, *args, **kwargs)
-
 
 
 class StudentClassListView(generics.ListAPIView):
@@ -207,3 +206,128 @@ class UpdateStudentGradeView(generics.UpdateAPIView):
         self.perform_update(serializer)
 
         return Response(serializer.data)
+
+
+class RecordAttendanceView(generics.CreateAPIView):
+    serializer_class = AttendanceRecordSerializer
+    permission_classes = [IsTeacher]
+
+    def create(self, request, *args, **kwargs):
+        class_id = self.kwargs.get('class_id')
+        teacher = self.request.user.teacher
+
+        try:
+            course_semester = Class.objects.get(id=class_id, teacher=teacher)
+        except Class.DoesNotExist:
+            return Response(
+                {"error": "Class not found or you don't have permission to record attendance for this class."},
+                status=HTTP_404_NOT_FOUND)
+
+        serializer = self.get_serializer(data=request.data, many=True, context={'course_semester': course_semester})
+        serializer.is_valid(raise_exception=True)
+
+        attendance_records = []
+        for item in serializer.validated_data:
+            attendance_record = ClassStudentAttendance(
+                course_semester=course_semester,
+                student=item['student'],
+                date=item['date'],
+                attendance=item['attendance']
+            )
+            attendance_records.append(attendance_record)
+
+        ClassStudentAttendance.objects.bulk_create(attendance_records)
+
+        return Response({"message": "Attendance recorded successfully"}, status=HTTP_201_CREATED)
+
+
+from django.utils import timezone
+from django.db import transaction
+
+
+# class StudentClassViewSet(generics.RetrieveAPIView):
+#     permission_classes = [IsStudent]
+#     queryset = Class.objects.all()
+#     serializer_class = StudentClassSerializer
+
+
+class StudentClassChangeView(generics.CreateAPIView):
+    serializer_class = ClassChangeSerializer
+    permission_classes = [IsStudent]
+
+    @transaction.atomic
+    def create(self, request, *args, **kwargs):
+        semester_id = self.kwargs.get('semester_id')
+        student = self.request.user.student
+        now = timezone.now()
+
+        # Check if StudentSemester record exists
+        try:
+            student_semester = StudentSemester.objects.get(student=student, semester_id=semester_id)
+        except StudentSemester.DoesNotExist:
+            return Response({"error": "You are not enrolled in this semester."}, status=HTTP_400_BAD_REQUEST)
+
+        # Check if the current time is within the allowed period
+        semester = student_semester.semester
+        if not (semester.start == now.date() or (semester.add_drop_start <= now.date() <= semester.add_drop_end)):
+            if now.date() < semester.start:
+                return Response({"error": "The semester has not started yet."}, status=HTTP_400_BAD_REQUEST)
+            elif now.date() > semester.add_drop_end:
+                return Response({"error": "The add/drop period for this semester has ended."},
+                                status=HTTP_400_BAD_REQUEST)
+
+        serializer = self.get_serializer(data=request.data)
+        serializer.is_valid(raise_exception=True)
+
+        add_classes = serializer.validated_data.get('add_classes', [])
+        delete_classes = serializer.validated_data.get('delete_classes', [])
+
+        for class_id in add_classes + delete_classes:
+            class_obj = Class.objects.filter(id=class_id, semester=semester)
+            if not class_obj.exists():
+                return Response({"error": f"class id '{class_id}' in semester {semester} does not exists"},
+                                HTTP_400_BAD_REQUEST)
+
+        for class_id in delete_classes:
+            if not ClassStudent.objects.filter(course_semester=class_id, student=student).exists():
+                return Response({"error": f"you can not delete non-existing class id '{class_id}'."},
+                                HTTP_400_BAD_REQUEST)
+
+        for class_id in add_classes:
+            if ClassStudent.objects.filter(course_semester=class_id, student=student).exists():
+                return Response({"error": f"you can not add existing class id '{class_id}'."},
+                                HTTP_400_BAD_REQUEST)
+
+        # Calculate the change in units
+        current_classes = ClassStudent.objects.filter(student=student)
+        current_units = sum(cls.course_semester.course.units for cls in current_classes)
+
+        add_units = sum(Class.objects.get(id=class_id, semester=semester).course.units
+                        for class_id in add_classes)
+        delete_units = sum(Class.objects.get(id=class_id, semester=semester).course.units
+                           for class_id in delete_classes)
+
+        new_units = current_units + add_units - delete_units
+
+        # Check if new units are within the allowed range
+        if new_units < student_semester.min_units or new_units > student_semester.max_units:
+            return Response({
+                "error": f"Total units must be between {student_semester.min_units} and {student_semester.max_units}."},
+                status=HTTP_400_BAD_REQUEST)
+
+        # Process deletions
+        ClassStudent.objects.filter(student=student, course_semester_id__in=delete_classes).delete()
+
+        # Process additions
+        new_class_students = []
+        for class_id in add_classes:
+            class_obj = Class.objects.get(id=class_id, semester=semester)
+            new_class_students.append(ClassStudent(student=student, course_semester=class_obj))
+
+        ClassStudent.objects.bulk_create(new_class_students)
+
+        # Update StudentSemester
+        student_semester.chosen_units = new_units
+        student_semester.save()
+
+        return Response({"message": "Classes updated successfully", "new_total_units": new_units}, status=HTTP_200_OK)

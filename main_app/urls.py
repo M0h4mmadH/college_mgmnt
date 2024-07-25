@@ -23,5 +23,8 @@ urlpatterns = [
          name='student-current-semester-classes'),
     path('teacher/class-students/<int:class_id>/', TeacherClassStudentsView.as_view(),
          name='teacher-class-students'),
-    path('teacher/update-grade/<int:class_id>/<int:student_id>/', UpdateStudentGradeView.as_view(), name='update-student-grade'),
+    path('teacher/update-grade/<int:class_id>/<int:student_id>/', UpdateStudentGradeView.as_view(),
+         name='update-student-grade'),
+    path('teacher/record-attendance/<int:class_id>/', RecordAttendanceView.as_view(), name='record-attendance'),
+    path('student/change-classes/<int:semester_id>/', StudentClassChangeView.as_view(), name='student-change-classes'),
 ]
