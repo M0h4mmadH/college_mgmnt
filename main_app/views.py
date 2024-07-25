@@ -8,6 +8,8 @@ from .permissions import IsTeacher, IsStudent
 from main_app.serializers import *
 from drf_yasg import openapi
 from drf_yasg.utils import swagger_auto_schema
+from django.utils import timezone
+from django.db import transaction
 
 
 class AdminViewSet(viewsets.ModelViewSet):
@@ -239,16 +241,6 @@ class RecordAttendanceView(generics.CreateAPIView):
         ClassStudentAttendance.objects.bulk_create(attendance_records)
 
         return Response({"message": "Attendance recorded successfully"}, status=HTTP_201_CREATED)
-
-
-from django.utils import timezone
-from django.db import transaction
-
-
-# class StudentClassViewSet(generics.RetrieveAPIView):
-#     permission_classes = [IsStudent]
-#     queryset = Class.objects.all()
-#     serializer_class = StudentClassSerializer
 
 
 class StudentClassChangeView(generics.CreateAPIView):
